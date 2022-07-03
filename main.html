@@ -12,7 +12,7 @@
     width: 100vh;
     height: 100vh;
     overflow: hidden;
-    background: black;
+    background: snow;
     color: white;
     font-family: sans-serif;
   }
@@ -28,9 +28,13 @@
   const { instance } =
     await WebAssembly.instantiateStreaming(wasm, { env: {
       print: console.log,
+      cosf: Math.cos,
+      sinf: Math.sin,
+      sqrtf: Math.sqrt,
     } });
 
   const canvas = document.getElementById("draw");
+  const ctx = canvas.getContext("2d", { alpha: false });
   canvas.width = 256;
   canvas.height = 256;
 
@@ -56,11 +60,9 @@
   })();
 
   (function frame(dt) {
-    instance.exports.draw(dt);
+    instance.exports.draw(dt * 0.001);
 
-    canvas
-      .getContext("2d")
-      .putImageData(img, 0, 0);
+    ctx.putImageData(img, 0, 0);
 
     requestAnimationFrame(frame);
   })(0.001);
