@@ -112,10 +112,13 @@ WASM_EXPORT uint8_t *init(int width, int height) {
 static void write_pixel(int x, int y, Color c, float a) {
   if (x < 0 || x >= rendr. width) return;
   if (y < 0 || y >= rendr.height) return;
-  rendr.pixels[((y * rendr.width) + x)*4 + 0] = c.r * (1 - a);
-  rendr.pixels[((y * rendr.width) + x)*4 + 1] = c.g * (1 - a);
-  rendr.pixels[((y * rendr.width) + x)*4 + 2] = c.b * (1 - a);
-  rendr.pixels[((y * rendr.width) + x)*4 + 3] = c.a * (1 - a);
+  c.r = 255 - c.r;
+  c.g = 255 - c.g;
+  c.b = 255 - c.b;
+  rendr.pixels[((y * rendr.width) + x)*4 + 0] = 255*(1 - (float)c.r/255 * a);
+  rendr.pixels[((y * rendr.width) + x)*4 + 1] = 255*(1 - (float)c.g/255 * a);
+  rendr.pixels[((y * rendr.width) + x)*4 + 2] = 255*(1 - (float)c.b/255 * a);
+  rendr.pixels[((y * rendr.width) + x)*4 + 3] = 255;
 }
 
 #if 0
