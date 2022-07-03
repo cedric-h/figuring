@@ -11,6 +11,8 @@ extern unsigned char __heap_base;
 /* -- END WASM -- */
 
 /* -- BEGIN MATH -- */
+#define abs(a) (((a) < 0) ? -(a) : (a))
+
 typedef struct { float x, y; } Vec2;
 typedef struct { float x, y, z; } Vec3;
 
@@ -107,13 +109,13 @@ WASM_EXPORT uint8_t *init(int width, int height) {
   return rendr.pixels;
 }
 
-static void write_pixel(int x, int y, Color c) {
+static void write_pixel(int x, int y, Color c, float a) {
   if (x < 0 || x >= rendr. width) return;
   if (y < 0 || y >= rendr.height) return;
-  rendr.pixels[((y * rendr.width) + x)*4 + 0] = c.r;
-  rendr.pixels[((y * rendr.width) + x)*4 + 1] = c.g;
-  rendr.pixels[((y * rendr.width) + x)*4 + 2] = c.b;
-  rendr.pixels[((y * rendr.width) + x)*4 + 3] = c.a;
+  rendr.pixels[((y * rendr.width) + x)*4 + 0] = c.r * (1 - a);
+  rendr.pixels[((y * rendr.width) + x)*4 + 1] = c.g * (1 - a);
+  rendr.pixels[((y * rendr.width) + x)*4 + 2] = c.b * (1 - a);
+  rendr.pixels[((y * rendr.width) + x)*4 + 3] = c.a * (1 - a);
 }
 
 #if 0
@@ -124,38 +126,80 @@ static void fill_rect(int px, int py) {
 }
 #endif
 
-#define abs(a) (((a) < 0) ? -(a) : (a))
+// integer part of x
+static int ipart(float f) { return (int)f; }
+static int round(float x) { return ipart(x + 0.5); }
+
+// fractional part of x
+static float fpart(float x) { return x - ipart(x); }
+static float rfpart(float x) { return 1 - fpart(x); }
+
 static void plot_line(Vec2 p0, Vec2 p1, Color c) {
-  int x0 = p0.x, y0 = p0.y;
-  int x1 = p1.x, y1 = p1.y;
+  float x0 = p0.x, y0 = p0.y;
+  float x1 = p1.x, y1 = p1.y;
+  
+  uint8_t steep = abs(y1 - y0) > abs(x1 - x0);
 
-  int dx = abs(x1 - x0);
-  int sx = (x0 < x1) ? 1 : -1;
-  int dy = -abs(y1 - y0);
-  int sy = (y0 < y1) ? 1 : -1;
+  float tmp;
+  #define swap(a, b) tmp = a, a = b, b = tmp
+  if   (steep) swap(x0, y0), swap(x1, y1);
+  if (x0 > x1) swap(x0, x1), swap(y0, y1);
+  #undef swap
+  
+  float dx = x1 - x0;
+  float dy = y1 - y0;
 
-  int e2;
-  int error = dx + dy;
+  float gradient = (dx == 0.0f) ? 1.0f : dy / dx;
 
-  while (1) {
-    write_pixel(x0, y0, c);
-    if (x0 == x1 && y0 == y1) break;
-    e2 = 2 * error;
-    if (e2 >= dy) {
-      if (x0 == x1) break;
-      error += dy;
-      x0 += sx;
+  // handle first endpoint
+  float xend = round(x0);
+  float yend = y0 + gradient * (xend - x0);
+  float xgap = rfpart(x0 + 0.5);
+  float xpxl1 = xend; // this will be used in the main loop
+  float ypxl1 = ipart(yend);
+  if (steep) {
+    write_pixel(ypxl1,   xpxl1, c, rfpart(yend) * xgap);
+    write_pixel(ypxl1+1, xpxl1, c,  fpart(yend) * xgap);
+  } else {
+    write_pixel(xpxl1, ypxl1  , c, rfpart(yend) * xgap);
+    write_pixel(xpxl1, ypxl1+1, c,  fpart(yend) * xgap);
+  }
+
+  float intery = yend + gradient; // first y-intersection for the main loop
+
+  // handle second endpoint
+  xend = round(x1);
+  yend = y1 + gradient * (xend - x1);
+  xgap = fpart(x1 + 0.5);
+  float xpxl2 = xend; // this will be used in the main loop
+  float ypxl2 = ipart(yend);
+  if (steep) {
+    write_pixel(ypxl2  , xpxl2, c, rfpart(yend) * xgap);
+    write_pixel(ypxl2+1, xpxl2, c,  fpart(yend) * xgap);
+  } else {
+    write_pixel(xpxl2, ypxl2,   c, rfpart(yend) * xgap);
+    write_pixel(xpxl2, ypxl2+1, c,  fpart(yend) * xgap);
+  }
+
+  // main loop
+  if (steep) {
+    for (int x = xpxl1 + 1; x < xpxl2; x++) {
+      write_pixel(ipart(intery)  , x, c, rfpart(intery));
+      write_pixel(ipart(intery)+1, x, c,  fpart(intery));
+      intery += gradient;
     }
-    if (e2 <= dx) {
-      if (y0 == y1) break;
-      error += dx;
-      y0 += sy;
+  } else {
+    for (int x = xpxl1 + 1; x < xpxl2; x++) {
+      write_pixel(x, ipart(intery),   c, rfpart(intery));
+      write_pixel(x, ipart(intery)+1, c,  fpart(intery));
+      intery += gradient;
     }
   }
 }
 
 WASM_EXPORT void draw(float dt) {
-  __builtin_memset(rendr.pixels, 235, rendr.width * rendr.height * 4);
+  // __builtin_memset(rendr.pixels, 235, rendr.width * rendr.height * 4);
+  __builtin_memset(rendr.pixels, 255, rendr.width * rendr.height * 4);
 
   rendr.mvp = look_at4x4(
     (Vec3) { sinf(dt), cosf(dt), 1.0f + sinf(dt*15) * 0.1f },

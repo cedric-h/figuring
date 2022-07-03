@@ -14,6 +14,7 @@ cd build
    -Wl,--export-all \
    -Wl,--lto-O3 \
    -Wl,--allow-undefined \
+   -Wall \
    -mbulk-memory \
    -o main.wasm \
    ../main.c
