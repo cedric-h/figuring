@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <title>help im trapped in stick man factory</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <meta name="description" content="" />
+  <style>
+  body {
+    margin: 0px;
+    padding: 0px;
+    width: 100vh;
+    height: 100vh;
+    overflow: hidden;
+    background: black;
+    color: white;
+    font-family: sans-serif;
+  }
+  </style>
+</head>
+<body>
+  <canvas id="draw"></canvas>
+  <script>
+/* "with great power, comes great renamability" - max wofford */
+
+(async () => {
+  const wasm = fetch("build/main.wasm");
+  const { instance } =
+    await WebAssembly.instantiateStreaming(wasm, { env: {
+      print: console.log,
+    } });
+
+  const canvas = document.getElementById("draw");
+  canvas.width = 256;
+  canvas.height = 256;
+
+  let img;
+  (window.onresize = () => {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const scale = Math.min(w/16, h/9);
+    canvas.width = scale*16;
+    canvas.height = scale*9;
+
+    canvas.style["position"] = "absolute";
+    canvas.style["left"] = (w - canvas.width)/2 + "px";
+    canvas.style["top"] = (h - canvas.height)/2 + "px";
+
+    const pixels = instance.exports.init(canvas.width, canvas.height);
+    const screen = new Uint8ClampedArray(
+      instance.exports.memory.buffer,
+      pixels,
+      canvas.width * canvas.height * 4
+    );
+    img = new ImageData(screen, canvas.width, canvas.height);
+  })();
+
+  (function frame(dt) {
+    instance.exports.draw(dt);
+
+    canvas
+      .getContext("2d")
+      .putImageData(img, 0, 0);
+
+    requestAnimationFrame(frame);
+  })(0.001);
+
+})()
+</script>
+</body>
+</html>
